@@ -11,6 +11,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
+	"github.com/wesley601/kafka-notify/pkg/kafka"
 	"github.com/wesley601/kafka-notify/pkg/models"
 )
 
@@ -29,9 +30,28 @@ func main() {
 		data: make(UserNotifications),
 	}
 
+	consumer, err := kafka.NewConsumer(KafkaServerAddress, ConsumerGroup)
+	if err != nil {
+		panic(err)
+	}
+
+	messages := make(chan kafka.Message)
+
 	ctx, cancel := context.WithCancel(context.Background())
-	go setupConsumerGroup(ctx, store)
+	go consumer.Consume(ctx, ConsumerTopic, messages)
 	defer cancel()
+
+	go func() {
+		for msg := range messages {
+			var notification models.Notification
+			err := json.Unmarshal(msg.Value, &notification)
+			if err != nil {
+				log.Printf("failed to unmarshal notification: %v", err)
+				continue
+			}
+			store.Add(msg.Key, notification)
+		}
+	}()
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
@@ -99,37 +119,6 @@ func (consumer *Consumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim s
 		sess.MarkMessage(msg, "")
 	}
 	return nil
-}
-
-func initializeConsumerGroup() (sarama.ConsumerGroup, error) {
-	config := sarama.NewConfig()
-
-	consumerGroup, err := sarama.NewConsumerGroup([]string{KafkaServerAddress}, ConsumerGroup, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize consumer group: %w", err)
-	}
-
-	return consumerGroup, nil
-}
-
-func setupConsumerGroup(ctx context.Context, store *NotificationStore) {
-	consumerGroup, err := initializeConsumerGroup()
-	if err != nil {
-		log.Printf("initialization error: %v", err)
-	}
-	defer consumerGroup.Close()
-
-	consumer := &Consumer{store: store}
-
-	for {
-		err = consumerGroup.Consume(ctx, []string{ConsumerTopic}, consumer)
-		if err != nil {
-			log.Printf("error from consumer: %v", err)
-		}
-		if ctx.Err() != nil {
-			return
-		}
-	}
 }
 
 func handleNotifications(ctx *gin.Context, store *NotificationStore) {

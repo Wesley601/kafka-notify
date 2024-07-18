@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
+	"github.com/wesley601/kafka-notify/pkg/kafka"
 	"github.com/wesley601/kafka-notify/pkg/models"
 )
 
@@ -29,7 +29,7 @@ func main() {
 		{ID: 4, Name: "Lena"},
 	}
 
-	producer, err := setupProducer()
+	producer, err := kafka.NewProducer(KafkaServerAddress)
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +46,7 @@ func main() {
 	}
 }
 
-func sendMessageHandler(producer sarama.SyncProducer, users []models.User) gin.HandlerFunc {
+func sendMessageHandler(producer kafka.Producer, users []models.User) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		fromID, err := getIDFromRequest("fromID", ctx)
 		if err != nil {
@@ -60,7 +60,7 @@ func sendMessageHandler(producer sarama.SyncProducer, users []models.User) gin.H
 			return
 		}
 
-		err = sendKafkaMessage(producer, users, ctx, fromID, toID)
+		err = sendMessage(producer, users, ctx, fromID, toID)
 		if err != nil {
 			if errors.Is(err, ErrUserNotFoundInProducer) {
 				ctx.JSON(http.StatusNotFound, gin.H{"message": "User not found"})
@@ -74,7 +74,7 @@ func sendMessageHandler(producer sarama.SyncProducer, users []models.User) gin.H
 	}
 }
 
-func sendKafkaMessage(producer sarama.SyncProducer, users []models.User, ctx *gin.Context, fromID, toID int) error {
+func sendMessage(producer kafka.Producer, users []models.User, ctx *gin.Context, fromID, toID int) error {
 	message := ctx.PostForm("message")
 
 	fromUser, err := findUserByID(fromID, users)
@@ -98,14 +98,7 @@ func sendKafkaMessage(producer sarama.SyncProducer, users []models.User, ctx *gi
 		return fmt.Errorf("failed to marshal notification: %w", err)
 	}
 
-	msg := &sarama.ProducerMessage{
-		Topic: KafkaTopic,
-		Key:   sarama.StringEncoder(strconv.Itoa(toUser.ID)),
-		Value: sarama.StringEncoder(notificationJSON),
-	}
-
-	_, _, err = producer.SendMessage(msg)
-	return err
+	return producer.Emit(KafkaTopic, strconv.Itoa(toUser.ID), notificationJSON)
 }
 
 func findUserByID(id int, users []models.User) (models.User, error) {
@@ -124,14 +117,4 @@ func getIDFromRequest(formValue string, ctx *gin.Context) (int, error) {
 		return 0, fmt.Errorf("failed to parse ID from form value %s, %w", formValue, err)
 	}
 	return id, nil
-}
-
-func setupProducer() (sarama.SyncProducer, error) {
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	producer, err := sarama.NewSyncProducer([]string{KafkaServerAddress}, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup producer: %w", err)
-	}
-	return producer, nil
 }
