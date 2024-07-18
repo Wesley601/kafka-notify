@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/IBM/sarama"
-	"github.com/wesley601/kafka-notify/pkg/models"
+	"github.com/wesley601/kafka-notify/models"
 )
 
 type saramaConsumer struct {

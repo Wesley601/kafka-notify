@@ -11,8 +11,8 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin"
+	"github.com/wesley601/kafka-notify/models"
 	"github.com/wesley601/kafka-notify/pkg/kafka"
-	"github.com/wesley601/kafka-notify/pkg/models"
 )
 
 const (
