@@ -2,10 +2,10 @@ package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 
-	"github.com/IBM/sarama"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 type Message struct {
@@ -14,36 +14,44 @@ type Message struct {
 }
 
 type Consumer struct {
-	consumerGroup sarama.ConsumerGroup
+	addr          kgo.Opt
+	consumerGroup kgo.Opt
 }
 
 func NewConsumer(kafkaServerAddress, consumerGroup string) (Consumer, error) {
-	config := sarama.NewConfig()
-
-	cg, err := sarama.NewConsumerGroup(
-		[]string{kafkaServerAddress},
-		consumerGroup,
-		config,
-	)
-	if err != nil {
-		return Consumer{}, fmt.Errorf("failed to initialize consumer group: %w", err)
+	c := Consumer{
+		addr:          kgo.SeedBrokers(kafkaServerAddress),
+		consumerGroup: kgo.ConsumerGroup(consumerGroup),
 	}
 
-	return Consumer{
-		consumerGroup: cg,
-	}, nil
+	return c, nil
 }
 
-func (c *Consumer) Consume(ctx context.Context, topic string, receive chan Message) {
-	sc := saramaConsumer{receive: receive}
+type Record struct {
+	Key   string
+	Value []byte
+}
 
+type Receiver func(record Record)
+
+func (c *Consumer) Consume(ctx context.Context, topic string, receiver Receiver) error {
+	consumer, err := kgo.NewClient(c.addr, c.consumerGroup, kgo.ConsumeTopics(topic))
+	if err != nil {
+		return fmt.Errorf("error tring to start to consume topic %s: %w", topic, err)
+	}
 	for {
-		err := c.consumerGroup.Consume(ctx, []string{topic}, sc)
-		if err != nil {
-			log.Printf("error from consumer: %v", err)
+		fetches := consumer.PollFetches(ctx)
+		if errs := fetches.Errors(); len(errs) > 0 {
+			return errors.New(fmt.Sprint(errs))
 		}
-		if ctx.Err() != nil {
-			return
-		}
+
+		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
+			p.EachRecord(func(record *kgo.Record) {
+				receiver(Record{
+					Key:   string(record.Key),
+					Value: record.Value,
+				})
+			})
+		})
 	}
 }

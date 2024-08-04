@@ -1,38 +1,41 @@
 package kafka
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/IBM/sarama"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 type Producer struct {
-	producer sarama.SyncProducer
+	producer *kgo.Client
 }
 
 func NewProducer(kafkaServerAddress string) (Producer, error) {
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	producer, err := sarama.NewSyncProducer([]string{kafkaServerAddress}, config)
+	cl, err := kgo.NewClient(kgo.SeedBrokers(kafkaServerAddress))
 	if err != nil {
-		return Producer{}, fmt.Errorf("failed to setup producer: %w", err)
+		return Producer{}, fmt.Errorf("error tring to init kafka producer: %w", err)
 	}
+
 	return Producer{
-		producer: producer,
+		producer: cl,
 	}, nil
 }
 
 func (p *Producer) Emit(topic, key string, msg []byte) error {
-	message := &sarama.ProducerMessage{
+	record := &kgo.Record{
 		Topic: topic,
-		Key:   sarama.StringEncoder(key),
-		Value: sarama.StringEncoder(msg),
+		Value: msg,
+		Key:   []byte(key),
+	}
+	if err := p.producer.ProduceSync(context.Background(), record); err.FirstErr() != nil {
+		return fmt.Errorf("error tring to produce a message: %w", err.FirstErr())
 	}
 
-	_, _, err := p.producer.SendMessage(message)
-	return err
+	return nil
 }
 
 func (p *Producer) Close() error {
-	return p.producer.Close()
+	p.producer.Close()
+	return nil
 }
