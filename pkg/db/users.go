@@ -1,10 +1,13 @@
 package db
 
 import (
+	"context"
 	"errors"
-	"sync"
 
 	"github.com/wesley601/kafka-notify/models"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 var (
@@ -12,30 +15,35 @@ var (
 )
 
 type UserStore struct {
-	data []models.User
-	mu   sync.RWMutex
+	collection *mongo.Collection
 }
 
-func NewUserStore(users []models.User) *UserStore {
+func NewUserStore(db *mongo.Database) *UserStore {
 	return &UserStore{
-		data: users,
+		collection: db.Collection("users"),
 	}
 }
 
-func (us *UserStore) Add(userID string, user models.User) {
-	us.mu.Lock()
-	defer us.mu.Unlock()
-	us.data = append(us.data, user)
+func (us *UserStore) Add(user models.User) error {
+	_, err := us.collection.InsertOne(context.Background(), user)
+	return err
 }
 
-func (us *UserStore) ByID(userID int) (models.User, error) {
-	us.mu.RLock()
-	defer us.mu.RUnlock()
-	for _, user := range us.data {
-		if user.ID == userID {
-			return user, nil
+func (us *UserStore) ByID(userID string) (models.User, error) {
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return models.User{}, err
+	}
+
+	var user models.User
+	result := us.collection.FindOne(context.Background(), bson.D{{Key: "_id", Value: id}})
+	if err := result.Decode(&user); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return models.User{}, ErrUserNotFoundInProducer
 		}
+
+		return models.User{}, err
 	}
 
-	return models.User{}, ErrUserNotFoundInProducer
+	return user, nil
 }

@@ -19,6 +19,6 @@ func ConsumeNotification(store *db.NotificationStore) kafka.Receiver {
 			fmt.Println("error tring to read the message")
 			return
 		}
-		store.Add(record.Key, notification)
+		store.Add(notification)
 	}
 }

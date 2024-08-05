@@ -1,12 +1,15 @@
 package models
 
+import "go.mongodb.org/mongo-driver/bson/primitive"
+
 type User struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID   primitive.ObjectID `json:"id" bson:"_id"`
+	Name string             `json:"name" bson:"name"`
 }
 
 type Notification struct {
-	From    User   `json:"from"`
-	To      User   `json:"to"`
-	Message string `json:"message"`
+	ID      primitive.ObjectID `json:"-" bson:"_id"`
+	From    User               `json:"from" bson:"from"`
+	To      User               `json:"to" bson:"to"`
+	Message string             `json:"message" bson:"message"`
 }

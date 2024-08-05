@@ -3,9 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"github.com/wesley601/kafka-notify/models"
 	"github.com/wesley601/kafka-notify/pkg/kafka"
 )
@@ -13,7 +11,7 @@ import (
 var KafkaTopic = "notifications"
 
 type UserStore interface {
-	ByID(int) (models.User, error)
+	ByID(string) (models.User, error)
 }
 
 type MessageService struct {
@@ -28,9 +26,7 @@ func NewMessageService(producer kafka.Producer, userStore UserStore) *MessageSer
 	}
 }
 
-func (ms MessageService) SendMessage(ctx *gin.Context, fromID, toID int) error {
-	message := ctx.PostForm("message")
-
+func (ms MessageService) SendMessage(message, fromID, toID string) error {
 	fromUser, err := ms.userStore.ByID(fromID)
 	if err != nil {
 		return err
@@ -52,5 +48,5 @@ func (ms MessageService) SendMessage(ctx *gin.Context, fromID, toID int) error {
 		return fmt.Errorf("failed to marshal notification: %w", err)
 	}
 
-	return ms.producer.Emit(KafkaTopic, strconv.Itoa(toUser.ID), notificationJSON)
+	return ms.producer.Emit(KafkaTopic, toUser.ID.Hex(), notificationJSON)
 }

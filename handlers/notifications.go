@@ -12,13 +12,9 @@ import (
 
 func GetNotifications(store *db.NotificationStore) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		userID, err := getUserIDFromRequest(ctx)
-		if err != nil {
-			ctx.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
-			return
-		}
-
+		userID := ctx.Param("userID")
 		notes, err := store.Get(userID)
+
 		if err != nil {
 			if errors.Is(err, db.ErrNoUserFound) {
 				ctx.JSON(http.StatusNotFound, gin.H{
@@ -29,7 +25,7 @@ func GetNotifications(store *db.NotificationStore) gin.HandlerFunc {
 			}
 
 			ctx.JSON(http.StatusInternalServerError, gin.H{
-				"message":       "some went wrong",
+				"message":       err.Error(),
 				"notifications": []models.Notification{},
 			})
 			return

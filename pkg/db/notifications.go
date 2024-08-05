@@ -1,10 +1,13 @@
 package db
 
 import (
+	"context"
 	"errors"
-	"sync"
 
 	"github.com/wesley601/kafka-notify/models"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 var (
@@ -14,29 +17,37 @@ var (
 type UserNotifications map[string][]models.Notification
 
 type NotificationStore struct {
-	data UserNotifications
-	mu   sync.RWMutex
+	collection *mongo.Collection
 }
 
-func NewNotificationStore() *NotificationStore {
+func NewNotificationStore(db *mongo.Database) *NotificationStore {
 	return &NotificationStore{
-		data: make(UserNotifications),
+		collection: db.Collection("notifications"),
 	}
 }
 
-func (ns *NotificationStore) Add(userID string, notification models.Notification) {
-	ns.mu.Lock()
-	defer ns.mu.Unlock()
-	ns.data[userID] = append(ns.data[userID], notification)
+func (ns *NotificationStore) Add(notification models.Notification) error {
+	notification.ID = primitive.NewObjectID()
+	_, err := ns.collection.InsertOne(context.Background(), notification)
+	return err
 }
 
 func (ns *NotificationStore) Get(userID string) ([]models.Notification, error) {
-	ns.mu.RLock()
-	defer ns.mu.RUnlock()
-	notifications, ok := ns.data[userID]
-	if !ok {
-		return nil, ErrNoUserFound
+	id, err := primitive.ObjectIDFromHex(userID)
+	if err != nil {
+		return nil, err
 	}
 
-	return notifications, nil
+	result, err := ns.collection.Find(context.Background(), bson.D{{Key: "to._id", Value: id}})
+	if err != nil {
+		return nil, err
+	}
+
+	var results []models.Notification
+	err = result.All(context.Background(), &results)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, err
 }

@@ -12,19 +12,7 @@ import (
 
 func SendMessage(producer kafka.Producer, messageService services.MessageService) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		fromID, err := getIDFromRequest("fromID", ctx)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-
-		toID, err := getIDFromRequest("toID", ctx)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
-			return
-		}
-
-		err = messageService.SendMessage(ctx, fromID, toID)
+		err := messageService.SendMessage(ctx.PostForm("message"), ctx.PostForm("fromID"), ctx.PostForm("toID"))
 		if err != nil {
 			if errors.Is(err, db.ErrUserNotFoundInProducer) {
 				ctx.JSON(http.StatusNotFound, gin.H{"message": "User not found"})

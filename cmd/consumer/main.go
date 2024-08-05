@@ -10,6 +10,8 @@ import (
 	"github.com/wesley601/kafka-notify/pkg/db"
 	"github.com/wesley601/kafka-notify/pkg/kafka"
 	"github.com/wesley601/kafka-notify/services"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
@@ -20,7 +22,18 @@ const (
 )
 
 func main() {
-	store := db.NewNotificationStore()
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://localhost:27017/?retryWrites=true"))
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		if err := client.Disconnect(context.Background()); err != nil {
+			panic(err)
+		}
+	}()
+
+	store := db.NewNotificationStore(client.Database("test"))
 	consumer, err := kafka.NewConsumer(KafkaServerAddress, ConsumerGroup)
 	if err != nil {
 		panic(err)
